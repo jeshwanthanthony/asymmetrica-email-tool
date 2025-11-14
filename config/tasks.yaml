@@ -1,0 +1,271 @@
+tasks:
+
+- id: gather_urls
+  agent: web_researcher
+  output_format: raw
+  description: |
+    Search the open web for up to 50 new, HTTPS-only URLs related to:
+      • Investor Profile   : "{investor_type}"
+      • Investment Product : "{investment_product}"
+      • Sector             : "{sector}"
+
+    Only include real investor-related websites.  
+    Focus on high-quality investor sites, fund managers, family offices, or organizations that could reasonably be investors.
+
+    **Important instructions:**
+    - Only output HTTPS URLs (no HTTP).
+    - No social media links (e.g., LinkedIn, Facebook).
+    - No irrelevant news sites or press releases.
+    - Exclude any URLs already in the CRM.
+
+  expected_output: |
+    Please respond with a list of URLs, separated by line breaks.
+
+    Example format:
+    https://fund-alpha.com
+    https://impact-fo.ch
+    https://sustainablefunds.org
+
+- id: classify_url
+  agent: url_classifier
+  output_format: raw
+  description: |
+    Given the URL `{url}`, examine the page carefully and classify it into one of two types:
+
+    • investor_site → If it is a website belonging to an investment firm, fund manager, or similar organization.
+    • article_page  → If it is an article, blog, news story, or publication about investments.
+
+    **Important instructions:**
+    - Only use the page’s visible content and metadata.
+    - If the page is ambiguous, default to "article_page."
+    - Do not make up a type.
+
+  expected_output: |
+    Please respond using this exact format:
+
+    URL: {url}
+    Site Type: <investor_site or article_page>
+
+    (where Site Type must be either "investor_site" or "article_page")
+
+- id: process_investor_site
+  agent: investor_analyst
+  output_format: raw
+  description: |
+    Given that `site_type` is \"investor_site\", visit up to 5 pages from the root URL `{url}`.
+    Carefully extract only the information that is actually present on the website.
+    Prioritize pages like "Contact Us", "Our Team", and "About" that are likely to have contact info.
+
+    Your job is to pull out the following fields:
+
+      • Company Name (organization or fund name)
+      • Contact Names (names of individuals found, if available; if the contact has a job title, include it after the name in parentheses; if there are more than 5, pick the top 5 that seem most relevant to the investment product.)
+      • Emails (list of emails if available)
+      • Phone Numbers (list of phone numbers if available)
+      • LinkedIn Profiles (list of LinkedIn URLs if available)
+      • Investment Interests (summary of investment focus or sectors, if available)
+      • Match Rating (rate from 1–10 how closely the company matches sustainable agriculture or farmland investment goals)
+      • Timestamp Processed (UTC timestamp at the time of extraction)
+
+    **Important Instructions:**
+    - Only use verifiable data found on the website pages.
+    - Do not invent or hallucinate any information.
+    - If a field is missing, output "N/A" (for text fields) or leave the list empty (for emails, contacts, etc).
+    - Always fill every field.
+    - If no LinkedIn profiles are available, leave it empty.
+    - If match rating is unclear, estimate based on focus areas (higher if aligned with sustainable agriculture).
+    - Extract clean and readable information (no HTML tags, no broken text).
+
+  expected_output: |
+    YOU MUST STRICTLY FOLLOW THIS EXACT FORMAT:
+
+    Company Name: <Company Name or N/A>
+    Contact Names: <List of contact names or N/A>
+    Emails: <List of emails or N/A>
+    Phone Numbers: <List of phone numbers or N/A>
+    LinkedIn Profiles: <List of LinkedIn URLs or N/A>
+    Investment Interests: <List of investment sectors or N/A>
+    Match Rating: <Number between 1 and 10>
+    Timestamp Processed: <UTC timestamp like 2025-04-26T20:00:00Z>
+
+    **Notes:**
+    - Separate multiple items in lists (like emails, contacts) with ` | ` (a vertical bar with spaces).
+    - Ensure clean formatting is use. DO NOT ADD EXTRA COMMENTARY.
+    - Only output these fields and nothing else.
+
+- id: process_article_page
+  agent: article_analyst
+  depends_on: classify_url
+  output_format: raw
+  description: |
+    Given that `site_type` is \"article_page\", visit the single page at `{url}` and perform the following tasks:
+
+    **Step 1:** Scan the article for any mentioned organizations, companies, funds, or investors.
+
+    **Step 2:** Select exactly **one** company that seems like a good potential fit for the investment product:
+      • Prefer companies related to investing, sustainable agriculture, ESG, private equity, or similar fields.
+      • If no companies are mentioned or none seem suitable, clearly state \"No Suitable Company Found\".
+
+    **Step 3:** Extract and output the following information about the selected company:
+      • Company Name
+      • Contact Names (individuals mentioned alongside the company, if any)
+      • Emails (if any emails associated with the company are found on the page)
+      • Phone Numbers (if any are found)
+      • LinkedIn Profiles (if any are found)
+
+    **Important Instructions:**
+    - You must always output every field.
+    - If a field is missing, use \"N/A\" or an empty list where appropriate.
+    - If \"No Suitable Company Found\", the Contact Names, Emails, Phones, and LinkedIn Profiles must all be \"N/A\" or empty.
+    - DO NOT fabricate companies or data if not present.
+    - DO NOT pick random unrelated companies.
+    - If no suitable company is found, signal clearly by setting \"Company Name: No Suitable Company Found\".
+
+  expected_output: |
+    Please respond using this exact format:
+
+    Company Name: {{company_name}}
+    Contact Names: {{contact_names}}
+    Emails: {{emails}}
+    Phone Numbers: {{phone_numbers}}
+    LinkedIn Profiles: {{linkedin_profiles}}
+    Timestamp Processed: {{timestamp_processed}}
+
+    **Notes:**
+    - Separate multiple items in lists (like emails or contacts) using ` | ` (a vertical bar with spaces).
+    - Ensure fields are clean and readable (no HTML artifacts, no broken text).
+    - Only output these fields and nothing else.
+
+- id: find_company_sites
+  agent: web_researcher
+  depends_on: process_article_page
+  output_format: raw
+  description: |
+    Using the company name extracted by `process_article_page`, find the official website.
+
+    **Step 1:** 
+    - If the Company Name is \"No Suitable Company Found\", STOP immediately.
+    - Output a clear signal: \"Company Name: No Suitable Company Found\" and \"Company Site: N/A\".
+
+    **Step 2:** 
+    - Otherwise, search the web using the WebsiteSearchTool or web browsing.
+    - Find the **official primary website** for the company.
+    - Prioritize sites that match the company's name exactly or closely.
+    - Prefer HTTPS versions of the website.
+
+    **Step 3:** 
+    - If a valid website is found, output the company name and URL.
+    - If no website can be found, output \"Company Site: No Website Found\".
+
+    **Important Instructions:**
+    - Do not guess or fabricate websites.
+    - If multiple sites exist, pick the most official-looking (e.g., has company logo, proper About page).
+    - Ensure that URLs are full HTTPS links (e.g., https://company.com).
+
+  expected_output: |
+    Please respond using this exact format:
+
+    Company Name: {{company_name}}
+    Company Site: {{company_site}}
+
+    **Notes:**
+    - If no company was found previously, set Company Site to \"N/A\".
+    - If no official website can be found after search, set Company Site to \"No Website Found\".
+    - Only output these two fields — no extra explanation or commentary.
+
+- id: process_followup_investor
+  agent: investor_analyst
+  depends_on: find_company_sites
+  output_format: raw
+  description: |
+    Given the company site found by `find_company_sites`, visit and extract detailed investor lead information.
+
+    **Step 1:** 
+    - If `Company Site` is \"No Website Found\" or \"N/A\", STOP immediately.
+    - Output \"Company Name: No Suitable Company Found\" and \"URL: N/A\".
+
+    **Step 2:** 
+    - Otherwise, crawl up to 5 pages starting from the site found by `find_company_sites`.
+    - Extract the following information directly from the pages (no hallucination):
+
+      • Company Name (organization or fund name)
+      • Contact Names (individuals found, if available)
+      • Emails (list of emails if available)
+      • Phone Numbers (list of phone numbers if available)
+      • LinkedIn Profiles (list of LinkedIn URLs if available)
+      • Investment Interests (summary of investment focus or sectors)
+      • Match Rating (rate from 1–10 how closely it matches sustainable agriculture or farmland investing)
+      • Timestamp Processed (UTC timestamp)
+
+    **Important Instructions:**
+    - Only extract visible or metadata information.
+    - If a field cannot be found, output \"N/A\" (for text fields) or leave empty (for lists).
+    - Ensure all fields are completed with clean formatting.
+    - No guessing or fabrication is allowed.
+    - Visit and extract up to 5 pages from the root URL.
+
+  expected_output: |
+    Please respond using this exact format:
+
+    Company Name: {{company_name}}
+    Contact Names: {{contact_names}}
+    Emails: {{emails}}
+    Phone Numbers: {{phone_numbers}}
+    LinkedIn Profiles: {{linkedin_profiles}}
+    Timestamp Processed: {{timestamp_processed}}
+
+    **Notes:**
+    - If no valid company website was found, set \"URL\" to \"N/A\" and \"Company Name\" to \"No Suitable Company Found\".
+    - Separate multiple items with ` | ` (vertical bars with spaces).
+    - Only output these fields — no extra text.
+
+- id: combine_leads
+  agent: lead_coordinator
+  depends_on:
+    - process_investor_site
+    - process_followup_investor
+  output_format: raw
+  description: |
+    Your job is to merge the outputs from `process_investor_site` and `process_followup_investor` 
+    into a single clean lead record.
+
+    **Step 1:**  
+    - Prefer the more complete record if both are available.
+    - If both exist, prefer the original `process_investor_site` record unless the follow-up site has richer information.
+    - If only one is valid (the other is \"No Suitable Company Found\"), use the valid one.
+    - If both have \"No Suitable Company Found\", do not produce an output.
+
+    **Step 2:**  
+    Output exactly these fields for the merged lead:
+      • URL
+      • Company Name
+      • Contact Names
+      • Emails
+      • Phone Numbers
+      • LinkedIn Profiles
+      • Investment Interests
+      • Match Rating
+      • Timestamp Processed
+
+    **Important Instructions:**
+    - Do not fabricate or guess missing data.
+    - If any field is missing in the chosen record, use \"N/A\" or empty list as appropriate.
+    - Ensure that lists are formatted with ` | ` separators.
+    - Only output complete leads; if the information is inadequate (\"N/A\" for Company Name and URL), do not output.
+
+  expected_output: |
+    YOU MUST STRICTLY OUTPUT USING THIS FORMAT:
+
+    Company Name: <company_name_or_N/A>
+    Contact Names: <contact_names_or_N/A>
+    Emails: <emails_list_or_N/A>
+    Phone Numbers: <phone_numbers_list_or_N/A>
+    LinkedIn Profiles: <linkedin_profiles_list_or_N/A>
+    Investment Interests: <investment_interests_or_N/A>
+    Match Rating: <number_1_to_10_or_N/A>
+    Timestamp Processed: <UTC_Timestamp>
+
+    **Notes:**
+    - Ensure consistent, clean field formatting.
+    - Only output these fields and nothing else.
+    - If no usable data is available, simply output nothing.

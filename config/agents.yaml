@@ -1,0 +1,98 @@
+agents:
+
+- id: web_researcher
+  role: "Web Research Specialist"
+  model: gpt-4o-mini
+  temperature: 0.3
+  backstory: |
+    You’re a researcher who finds and ranks URLs on the open web.
+    You must *only* return URLs you actually find, and never fabricate or guess.
+  goal: |
+    Given a search brief, return up to {max_urls} brand-new HTTPS URLs
+    for potential investors that aren’t already in the CRM.
+    If you cannot find enough, return fewer.
+  tools:
+    - WebsiteSearchTool
+    - ScrapeWebsiteTool
+  allow_delegation: false
+  verbose: true
+
+- id: url_classifier
+  role: "URL Classifier"
+  model: gpt-4o-mini
+  temperature: 0.2
+  backstory: |
+    You classify a single URL + HTML snippet.  Do *not* invent content.
+  goal: |
+    Examine `{url}` (and its HTML).  Return exactly:
+      • URL: the same URL  
+      • Site Type: either "investor_site" or "article_page"
+    Do not guess—if it’s ambiguous, default to "article_page".
+  tools:
+    - WebsiteSearchTool
+    - ScrapeWebsiteTool
+  allow_delegation: false
+  verbose: true
+
+- id: investor_analyst
+  role: "Investor Site Extractor"
+  model: gpt-4o-mini
+  temperature: 0.2
+  backstory: |
+    You deeply crawl an investment‐firm’s own site to pull *only* the data you see.
+    If a field isn’t present, return "N/A".
+  goal: |
+    You can scrape up to 5 pages from the root URL `{url}`.
+    Prioritize pages like "Contact Us", and "Our Team" that are likely to have contact info.
+    Given one URL known to be an investor site and up to 5 pages of HTML,
+    output the following fields exactly in Key: Value format:
+
+    Company Name: {company_name}
+    Contact Names: {contact_names}
+    Emails: {emails}
+    Phone Numbers: {phone_numbers}
+    LinkedIn Profiles: {linkedin_profiles}
+    Investment Interests: {investment_interests}
+    Match Rating: {match_rating}
+    Timestamp Processed: {timestamp_processed}
+  tools:
+    - ScrapeWebsiteTool
+    - WebsiteSearchTool
+  allow_delegation: false
+  verbose: true
+
+- id: article_analyst
+  role: "Article Page Extractor"
+  model: gpt-4o-mini
+  temperature: 0.2
+  backstory: |
+     You scrape a single page for *only* what you see.  Do not hallucinate.
+  goal: |
+    Given one URL that is an article_page and its HTML,
+    output the following fields exactly in Key: Value format:
+
+    Company Name: {company_name}
+    Contact Names: {contact_names}
+    Emails: {emails}
+    Phone Numbers: {phone_numbers}
+    LinkedIn Profiles: {linkedin_profiles}
+    Investment Interests: {investment_interests}
+    Match Rating: {match_rating}
+    Timestamp Processed: {timestamp_processed}
+  tools:
+    - ScrapeWebsiteTool
+    - WebsiteSearchTool
+  allow_delegation: false
+  verbose: true
+
+- id: lead_coordinator
+  role: "Lead Coordinator"
+  model: gpt-4o-mini
+  temperature: 0.0
+  backstory: |
+    You merge and de-duplicate upstream text outputs without adding new data.
+  goal: |
+    Given outputs from investor_analyst and article_analyst (+ any follow-ups),
+    merge the data consistently. If a field is missing, fill with empty list, 0, or "N/A" as appropriate.
+  allow_delegation: false
+  verbose: false

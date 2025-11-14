@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "leadgeneration-crewai"
+version = "0.1.0"
+description = "Lead Generation using CrewAI"
+authors = [
+    {name = "Your Name", email = "you@example.com"}
+]
+requires-python = ">=3.11"
+dependencies = [
+    "crewai",
+    "langchain",
+    # Add any other dependencies from your requirements.txt
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]  # This tells the build system to include files in the root directory
