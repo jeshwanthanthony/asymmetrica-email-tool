@@ -184,7 +184,7 @@ def email_tool(crm_df: pd.DataFrame):
 You are a skilled business development writer representing Asymmetrica Investments AG,
 a Swiss investment firm based in Zug, Switzerland.
 
-Do not include a Subject line; start directly with the greeting.
+Do not include a Subject line; start directly with the greeting. Never put place holder in email: [Your Name], It should be ready to send.  
 
 Write a short, warm, and professional cold outreach email introducing our company to {company_name}.
 This firm operates in {location_text or 'its respective region'} and is interested in {investment_interests or 'sustainable, strategic investments'}.
@@ -219,10 +219,25 @@ Optional context:
 
             email_text = get_openai_response(messages)
             st.session_state.generated_email = email_text
+            st.session_state["draft_email_text"] = email_text
 
     if "generated_email" in st.session_state:
         st.markdown("Generated Email Draft")
-        st.text_area("Email Content", st.session_state.generated_email, height=280)
+        st.session_state.setdefault(
+            "draft_email_text", st.session_state.get("generated_email", "")
+        )
+
+        draft_col, save_col = st.columns([3, 1])
+        with draft_col:
+            st.text_area(
+                "Email Content",
+                key="draft_email_text",
+                height=280,
+            )
+        with save_col:
+            if st.button("Save Text"):
+                st.session_state["generated_email"] = st.session_state["draft_email_text"]
+                st.success("Draft saved.")
 
         # Sender email entry (no modification of widget key after creation)
         st.session_state.setdefault("from_email", "")
@@ -256,7 +271,9 @@ Optional context:
                     sender_email,
                     email_select,
                     f"Exploring Collaboration with {company_name}",
-                    st.session_state.generated_email,
+                    st.session_state.get(
+                        "draft_email_text", st.session_state.get("generated_email", "")
+                    ),
                 )
 
 
