@@ -212,7 +212,7 @@ def fetch_website_context(website: str, max_chars: int = 5000) -> str:
 
 
 # =====================================================
-# OpenAI Response
+# OpenAI Response (kept for other callers, not used for file-attach flow)
 # =====================================================
 def get_openai_response(messages):
     openai_key, _ = load_keys()
@@ -278,8 +278,10 @@ def safe_get(df_row, col_name):
         return text if text and text.lower() != "nan" else ""
     return ""
 
+
 # global list (outside)
 mandate_text_parts = []
+
 
 def compute_mandate_text() -> str:
     """Join the global mandate parts into final text (outside)."""
@@ -348,7 +350,7 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
         st.text_area(
             "Investor Mandate (auto-assembled from Preqin columns)",
             mandate_text,
-            height=250
+            height=250,
         )
     else:
         st.info("No mandate information found for this investor.")
@@ -370,7 +372,7 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
             st.text_area(
                 "Website Text (auto-extracted)",
                 website_text,
-                height=200
+                height=200,
             )
         else:
             st.info("No website text could be extracted or the website did not load.")
@@ -441,8 +443,11 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
                             "role": role,
                             "email": contact_email,
                             "is_investment_role": (
-                                ("investment" in role.lower()) or ("portfolio" in role.lower())
-                            ) if role else False,
+                                ("investment" in role.lower())
+                                or ("portfolio" in role.lower())
+                            )
+                            if role
+                            else False,
                         }
                     )
             else:
@@ -478,10 +483,26 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
 
     greeting_line = f"Dear {greeting_recipient},"
 
-    # ---- 4. Generate email with correct greeting + firm philosophy + website ----
+    # -------------------------------------------------------
+    # PRODUCT / EXECUTIVE SUMMARY UPLOAD (NEW FEATURE)
+    # -------------------------------------------------------
+    st.markdown("### 📄 Upload Investment Product Material")
+
+    uploaded_product_file = st.file_uploader(
+        "Upload Executive Summary / Deck / Product Document (PDF, DOCX, or TXT)",
+        type=["pdf", "docx", "txt"],
+        key="product_upload",
+    )
+
+    if uploaded_product_file is not None:
+        st.success(f"Uploaded: {uploaded_product_file.name}")
+    else:
+        st.info("You can optionally upload a product document. The email will still work without it.")
+
+    # ---- 4. Generate email with correct greeting + firm philosophy + website + PRODUCT FILE ----
     if st.button("Generate Email"):
         with st.spinner("Generating email draft..."):
-            # (re-use website_text already fetched above)
+            # Build website context string (re-use website_text already fetched above)
             website_context = (
                 f"Here is public text extracted from the firm's website ({website}):\n"
                 f"{website_text}\n\n"
@@ -491,63 +512,122 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
                 else "No website content was available; keep the description of the firm generic and conservative."
             )
 
-            prompt = f"""
-You are writing on behalf of Asymmetrica Investments AG, a Swiss impact
-investment manager/Owner. Use the overview and principles below to write from our
-perspective:
+            openai_key, _ = load_keys()
+            if not openai_key:
+                st.error("Missing OPENAI_API_KEY in .env file.")
+                return
 
-Asymmetrica overview (Us):
+            client = OpenAI(api_key=openai_key)
+
+            # ------------------ upload product file to OpenAI (if provided) ------------------
+            file_content_part = [
+                {"type": "input_text", "text": ""}  # will be replaced below
+            ]
+            # we will rebuild it properly right after constructing prompt_text
+
+            file_attachment_part = []
+            if uploaded_product_file is not None:
+                try:
+                    uploaded = client.files.create(
+                        file=(
+                            uploaded_product_file.name,
+                            uploaded_product_file.getvalue(),
+                            "application/octet-stream",
+                        ),
+                        purpose="user_data",
+                    )
+                    file_attachment_part = [
+                        {
+                            "type": "input_file",
+                            "file_id": uploaded.id,
+                        }
+                    ]
+                except Exception as e:
+                    st.error(f"Failed to upload product file to OpenAI: {e}")
+                    file_attachment_part = []
+
+            # Main user prompt text (no fake product text, we rely on file attachment)
+            prompt_text = f"""
+You are a member of the Asymmetrica Investments AG team, writing a
+personal, thoughtful outreach email to a potential investment partner.
+Write in a natural, human tone while staying accurate to the information
+below. Never Mention name of a person of who is writing, just the comanpy.
+250 words limit
+
+Asymmetrica overview (who we are):
 {ASYMMETRICA_SUMMARY}
 
-Target firm:
+Target firm (who you are writing to):
 - Name: {company_name}
 - Location: {location_text or 'N/A'}
 - Strategy preferences: {strategy_prefs or 'N/A'}
 - Background / mandate (from their database entry): {investment_interests or 'N/A'}
 
-Investor mandate details, use this along with the things in the website content:
-{mandate_text}
+Investor mandate details from Preqin (must review)
+{mandate_text} 
 
-Website context:
+Public website context, must review
 {website_context}
 
-You can do you own reseach at {website} for to see how they match our company
+You may also have an attached product document (executive summary, deck, or similar)
+describing our current investment opportunity. If a file is attached, carefully read
+it and pull out most important points that closely align with thier goals. Then, weave those details into a dedicated middle paragraph that clearly
+shows how this opportunity could support the target firm's stated strategy and goals.
+Make it feel specific and relevant, not like a generic sales pitch and include the number.
+Casully slide in this section in a middle paragraph with a good flow instead of just 
+being like, here read this about is.
+
+If no product file is attached, simply write the email based on the information
+above and skip references to specific deal terms.
 
 Task:
-Write warm, and professional cold outreach email introducing Asymmetrica
-to this firm. Explain in 1–2 sentences how our philosophy and agricultural /
-real-asset focus could complement their stated strategy or portfolio, based only
-on the information above. You are trying to make them invest in out company.
+Write a warm, professional cold outreach email introducing Asymmetrica to this firm.
+Make it feel like it was written by a real person on the Asymmetrica team who has
+taken the time to understand their mandate and strategy. Show, in a friendly and
+credible way, how our agricultural / real-asset focus could complement their
+portfolio and why this could be a worthwhile conversation for them.
 
 The email must:
-- Never include : Subject, just go straight to the point
+- Not include any "Subject:" line – start directly with the body.
 - Begin with exactly this greeting line: {greeting_line}
-- Sound friendly yet credible, focusing on potential collaboration or investment alignment.
-- Use the Informantion from Mandated text and website content to understand the target, an include how 
-- their investment in our company could help both of us or how it can help them.
-- YOU GOAL IS TO CONVICE THEM TO INVEST IN OUR COMPANY AND BE persuasive.
-- End with this exact signature:
-
-Warm regards,
-Asymmetrica Investments AG
-Poststrasse 24, 6302 Zug, Switzerland
-Phone: +41 78 731 02 08
-Email: info@asymmetrica-investments.com
+- Use information from the mandate text, website context, and (if present) the
+  attached product document to highlight why an investment in our company aligns
+  with their goals.
+- Keep the tone persuasive but professional and non-pushy.
+- Include this sentence, near the end of the email, in a natural way:
+This is hte last line of the email, NEVER include ending signature or anything.
+  "Would you be available for a brief call to discuss further?"
+  
 """.strip()
 
-            messages = [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a concise,. "
-                        "Keep emails under, avoid buzzwords, and stay close "
-                        "to the provided facts."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ]
 
-            email_text = get_openai_response(messages)
+            # Build the content for Responses API
+            content_parts = [
+                {"type": "input_text", "text": prompt_text}
+            ] + file_attachment_part
+
+            try:
+                response = client.responses.create(
+                    model="gpt-4o",
+                    input=[
+                        {
+                            "role": "user",
+                            "content": content_parts,
+                        }
+                    ],
+                )
+
+                # Responses API: extract the generated text safely
+                email_text = ""
+                try:
+                    email_text = response.output[0].content[0].text
+                except Exception:
+                    # fallback: stringifying whole response if shape changes
+                    email_text = str(response)
+            except Exception as e:
+                st.error(f"OpenAI request failed: {e}")
+                return
+
             st.session_state.generated_email = email_text
             st.session_state["draft_email_text"] = email_text
 
@@ -607,3 +687,4 @@ Email: info@asymmetrica-investments.com
                         "draft_email_text", st.session_state.get("generated_email", "")
                     ),
                 )
+
