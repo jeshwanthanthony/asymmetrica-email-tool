@@ -232,9 +232,32 @@ def get_openai_response(messages):
 
 
 # =====================================================
-# Send Email via SendGrid
+# Helpers for email body formatting / SendGrid template
 # =====================================================
-def send_email(from_email, to_email, subject, body_text):
+def prepare_email_body_for_template(body_text: str) -> str:
+    """Clean and convert plain text into HTML-friendly lines for the template."""
+    # Strip any bold markers just in case
+    clean = body_text.replace("**", "")
+
+    # Normalize newlines
+    clean = clean.replace("\r\n", "\n")
+
+    # Turn line breaks into <br> so HTML respects them
+    html_body = clean.replace("\n\n", "<br><br>").replace("\n", "<br>")
+
+    return html_body
+
+
+# =====================================================
+# Send Email via SendGrid (with dynamic template + optional CC)
+# =====================================================
+# =====================================================
+# Send Email via SendGrid (plain text, optional CC)
+# =====================================================
+# =====================================================
+# Send Email via SendGrid (plain text, optional CC)
+# =====================================================
+def send_email(from_email, to_email, subject, body_text, cc_list=None):
     _, sendgrid_key = load_keys()
 
     if not from_email:
@@ -246,26 +269,42 @@ def send_email(from_email, to_email, subject, body_text):
         print("=== EMAIL (TEST MODE) ===")
         print("FROM:", from_email)
         print("TO:", to_email)
+        print("CC:", cc_list)
         print("SUBJECT:", subject)
         print("BODY:\n", body_text)
-        st.info("Test mode: email printed to console instead of sending.")
         return
 
     try:
         sg = SendGridAPIClient(sendgrid_key)
+
         message = Mail(
             from_email=from_email,
             to_emails=to_email,
-            subject=subject,
-            plain_text_content=body_text,
         )
+
+        # ✅ REQUIRED: Template ID
+        message.template_id = "d-6d042f7969624cdd87217c826865819a"
+
+        # ✅ REQUIRED: Dynamic data
+        message.dynamic_template_data = {
+            "subject": subject,
+            "email_body": body_text,   # ← plain text, untouched
+        }
+
+        # Optional CC
+        if cc_list:
+            message.cc = cc_list
+
         response = sg.send(message)
+
         if response.status_code in (200, 202):
-            st.success(f"Email sent from {from_email} to {to_email}.")
+            st.success(f"Email sent to {to_email}")
         else:
-            st.error(f"SendGrid failed (status {response.status_code}).")
+            st.error(f"SendGrid failed: {response.status_code}")
+
     except Exception as e:
         st.error(f"SendGrid error: {e}")
+
 
 
 # =====================================================
@@ -499,6 +538,14 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
     else:
         st.info("You can optionally upload a product document. The email will still work without it.")
 
+    # -------------------------------------------------------
+    # Subject line logic (depends on whether product/AVO file is uploaded)
+    # -------------------------------------------------------
+    if uploaded_product_file is not None:
+        email_subject = "Opportunistic Farmland Fund – Executive Summary & Investment Highlights"
+    else:
+        email_subject = f"Exploring Collaboration with {company_name}"
+
     # ---- 4. Generate email with correct greeting + firm philosophy + website + PRODUCT FILE ----
     if st.button("Generate Email"):
         with st.spinner("Generating email draft..."):
@@ -548,56 +595,111 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
 
             # Main user prompt text (no fake product text, we rely on file attachment)
             prompt_text = f"""
-You are a member of the Asymmetrica Investments AG team, writing a
-personal, thoughtful outreach email to a potential investment partner.
-Write in a natural, human tone while staying accurate to the information
-below. Never Mention name of a person of who is writing, just the comanpy.
-250 words limit
+You are writing on behalf of Asymmetrica Investments AG. Your task is to generate a
+human, concise, naturally-written outreach email to a potential investment partner.
+The tone must feel professional, thoughtful, and written by a real person — NEVER AI-sounding.
 
-Asymmetrica overview (who we are):
+Always follow these global rules:
+• Never mention any individual sender’s name unless the template explicitly requires it.
+• Never add extra sections beyond what is described.
+• Never change the greeting line. It must begin exactly as:
+  {greeting_line}
+• When referencing the firm, rely only on the provided information — do not invent facts.
+• When a product document is attached, you MUST follow the structure rules below EXACTLY.
+• When NO product document is attached, follow the non-attachment instructions at the end.
+
+────────────────────────────────────────────────────────
+ASSET INFORMATION AVAILABLE TO YOU
+────────────────────────────────────────────────────────
+
+Asymmetrica overview (use to describe who we are, briefly and naturally):
 {ASYMMETRICA_SUMMARY}
 
-Target firm (who you are writing to):
-- Name: {company_name}
-- Location: {location_text or 'N/A'}
-- Strategy preferences: {strategy_prefs or 'N/A'}
-- Background / mandate (from their database entry): {investment_interests or 'N/A'}
+Target firm profile (use for personalization):
+• Company Name: {company_name}
+• Location: {location_text or 'N/A'}
+• Strategy Preferences: {strategy_prefs or 'N/A'}
+• Background / Investment Interests: {investment_interests or 'N/A'}
 
-Investor mandate details from Preqin (must review)
-{mandate_text} 
+Investor mandate details (MUST be reviewed and used for personalization):
+{mandate_text}
 
-Public website context, must review
+Public website context (MUST be reviewed; use only what is clearly implied):
 {website_context}
 
-You may also have an attached product document (executive summary, deck, or similar)
-describing our current investment opportunity. If a file is attached, carefully read
-it and pull out most important points that closely align with thier goals. Then, weave those details into a dedicated middle paragraph that clearly
-shows how this opportunity could support the target firm's stated strategy and goals.
-Make it feel specific and relevant, not like a generic sales pitch and include the number.
-Casully slide in this section in a middle paragraph with a good flow instead of just 
-being like, here read this about is.
+────────────────────────────────────────────────────────
+STRUCTURE & CONTENT RULES (CRITICAL)
+────────────────────────────────────────────────────────
 
-If no product file is attached, simply write the email based on the information
-above and skip references to specific deal terms.
+• The email MUST use bullet points for all investment highlights.
+• Bullet points must be plain text bullets (• or -), NOT markdown formatting.
+• The section titled **“Fund Structure & Commitments” MUST remain STATIC**:
+  - Do NOT change numbers, ranges, structure, or wording in that section.
+  - Reproduce it exactly as provided below.
+• Other sections MAY be lightly tailored based on the investor’s mandate,
+  strategy preferences, or profile — but must remain conservative and factual.
+• Do NOT exaggerate, speculate, or invent performance claims.
 
-Task:
-Write a warm, professional cold outreach email introducing Asymmetrica to this firm.
-Make it feel like it was written by a real person on the Asymmetrica team who has
-taken the time to understand their mandate and strategy. Show, in a friendly and
-credible way, how our agricultural / real-asset focus could complement their
-portfolio and why this could be a worthwhile conversation for them.
+────────────────────────────────────────────────────────
+EMAIL FLOW (WHEN PRODUCT DOCUMENT IS ATTACHED)
+────────────────────────────────────────────────────────
 
-The email must:
-- Not include any "Subject:" line – start directly with the body.
-- Begin with exactly this greeting line: {greeting_line}
-- Use information from the mandate text, website context, and (if present) the
-  attached product document to highlight why an investment in our company aligns
-  with their goals.
-- Keep the tone persuasive but professional and non-pushy.
-- Include this sentence, near the end of the email, in a natural way:
-This is hte last line of the email, NEVER include ending signature or anything.
+The email MUST begin with:
+1. A warm, human introduction about Asymmetrica Investments AG.
+2. One or two personalized lines explaining WHY you are reaching out to this investor
+   (based on mandate, strategy preferences, location, or website context).
+3. A soft, natural transition into the attached executive summary.
+
+Next say "Attached is the executive summary for the AVO Capital Fund, a structured opportunity designed for long-term capital partners seeking exposure to high-margin agriculture and inflation-resilient assets. Key highlights include:"
+
+Now base the following information depending on the investor's profile
+Performance & Profitability
+• Target Net Return (IRR): 20–25% annually in USD.
+• Underlying Asset: Export-focused superfood farms with EBITDA margins > 50%.
+• Strategic Positioning: Deployment across top-producing regions creates arbitrage opportunities supported by generational turnover.
+• Distribution Advantage: Collaboration with Avoworks, the 4th largest U.S. avocado importer, securing premium market access.
+
+Portfolio Diversification & Inflation Hedge
+• Farmland provides structural protection against inflation and developed-market volatility.
+• Cash flows remain uncorrelated with real estate, VC, and traditional private equity.
+• Asset class remains undercapitalized despite rising global demand.
+
+BUT NOW THIS: 
+Fund Structure & Commitments  (THIS SECTION IS STATIC — DO NOT MODIFY)
+• Fund Size: USD 50–70M target, scalable to USD 150M capacity.
+• First Closing: USD 20M.
+• Investment Allocation:
+  - 70% orchard acquisitions (brownfield/greenfield)
+  - 30% CAPEX efficiency upgrades and processing improvements
+• Minimum Ticket Size: USD 1M.
+• Typical investment size: USD $4M per asset (combined initial + follow-up).
+• Distribution Profile: 8–14% target yield, semi-annual.
+• First compartment of an umbrella structure fund.
+
+Closing lines (adapt tone slightly, but keep meaning):
+If there is interest, we can provide access to our data room, including the Investment Memorandum, PPM, and full due diligence materials.
+Happy to schedule a discussion once you’ve reviewed the attached material.
+Looking forward to your feedback.
+
+────────────────────────────────────────────────────────
+WHEN NO PRODUCT DOCUMENT IS ATTACHED
+────────────────────────────────────────────────────────
+
+If NO document is attached:
+• Write a brief, warm, professional outreach email.
+• Begin with the exact greeting line: {greeting_line}
+• Use Asymmetrica’s summary, the investor mandate, and website context to explain strategic fit.
+• Do NOT include deal terms, performance figures, or product specifics.
+• Do NOT include a signature.
+• End with this exact final sentence and nothing after it:
   "Would you be available for a brief call to discuss further?"
-  
+
+────────────────────────────────────────────────────────
+IMPORTANT OUTPUT REQUIREMENTS
+────────────────────────────────────────────────────────
+• Output ONLY the email body.
+• No headers, no explanations, no meta-comments.
+• Maintain a human, confident, professional tone.
 """.strip()
 
 
@@ -628,6 +730,9 @@ This is hte last line of the email, NEVER include ending signature or anything.
                 st.error(f"OpenAI request failed: {e}")
                 return
 
+            # Remove any markdown bold markers like **this**
+            email_text = email_text.replace("**", "")
+
             st.session_state.generated_email = email_text
             st.session_state["draft_email_text"] = email_text
 
@@ -655,7 +760,7 @@ This is hte last line of the email, NEVER include ending signature or anything.
         col1, col2 = st.columns([3, 1])
         with col1:
             entered_email = st.text_input(
-                "Enter your email",
+                "Enter your email, MUST SAVE after entered",
                 value=st.session_state["from_email"],
                 placeholder="you@company.com",
                 key="from_email_input",
@@ -667,7 +772,34 @@ This is hte last line of the email, NEVER include ending signature or anything.
                 if cleaned:
                     st.info(f"Sender email set to: {cleaned}")
                 else:
-                    st.error("Please enter a valid sender email before sending.")
+                    st.error("Please enter a valid sender email before sending. Verify via Sendgrind")
+
+        # CC EMAILS (optional)
+        st.markdown("### CC (Optional)")
+
+        if "cc_list" not in st.session_state:
+            st.session_state.cc_list = []
+
+        cc_input = st.text_input(
+            "Add CC Email",
+            placeholder="cc@example.com",
+            key="cc_input",
+        )
+
+        if st.button("Add CC"):
+            email = cc_input.strip()
+            if email:
+                st.session_state.cc_list.append(email)
+                st.success(f"Added CC: {email}")
+            else:
+                st.error("Please enter a valid email.")
+
+        if st.session_state.cc_list:
+            st.write("**Current CC Recipients:**")
+            for e in st.session_state.cc_list:
+                st.write("- " + e)
+        else:
+            st.caption("No CC emails added yet.")
 
         sender_email = st.session_state.get("from_email", "").strip()
         final_recipient = recipient_email or firm_email
@@ -682,9 +814,11 @@ This is hte last line of the email, NEVER include ending signature or anything.
                 send_email(
                     sender_email,
                     final_recipient,
-                    f"Exploring Collaboration with {company_name}",
+                    email_subject,
                     st.session_state.get(
-                        "draft_email_text", st.session_state.get("generated_email", "")
+                        "draft_email_text",
+                        st.session_state.get("generated_email", "")
                     ),
+                    cc_list=st.session_state.cc_list if st.session_state.cc_list else None,
                 )
 
