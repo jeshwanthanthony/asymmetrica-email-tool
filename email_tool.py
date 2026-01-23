@@ -527,8 +527,6 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
     # -------------------------------------------------------
     st.markdown("### 📄 Upload Investment Product Material")
 
-    int uploaded = 0
-
     uploaded_product_file = st.file_uploader(
         "Upload Executive Summary / Deck / Product Document (PDF, DOCX, or TXT)",
         type=["pdf", "docx", "txt"],
