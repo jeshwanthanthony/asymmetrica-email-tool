@@ -248,7 +248,15 @@ def prepare_email_body_for_template(body_text: str) -> str:
     return html_body
 
 
-
+# =====================================================
+# Send Email via SendGrid (with dynamic template + optional CC)
+# =====================================================
+# =====================================================
+# Send Email via SendGrid (plain text, optional CC)
+# =====================================================
+# =====================================================
+# Send Email via SendGrid (plain text, optional CC)
+# =====================================================
 def send_email(from_email, to_email, subject, body_text, cc_list=None):
     _, sendgrid_key = load_keys()
 
@@ -297,6 +305,11 @@ def send_email(from_email, to_email, subject, body_text, cc_list=None):
     except Exception as e:
         st.error(f"SendGrid error: {e}")
 
+
+
+# =====================================================
+# Mandate helpers (outside the function as requested)
+# =====================================================
 def safe_get(df_row, col_name):
     """Get column text safely, clean, fallback to empty."""
     if col_name in df_row and pd.notna(df_row[col_name]):
@@ -313,6 +326,10 @@ def compute_mandate_text() -> str:
     """Join the global mandate parts into final text (outside)."""
     return "\n\n".join(mandate_text_parts)
 
+
+# =====================================================
+# Email Tool  (uses firm sheet + contacts sheet)
+# =====================================================
 def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
     st.subheader("Email Generator & Sender")
 
@@ -328,7 +345,9 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
     company_name = current_company["Company Name"]
     firm_email = str(current_company.get("Email", "")).strip()
 
-  
+    # -------------------------------------------------------
+    # BUILD MANDATE TEXT (append to global list; combine outside)
+    # -------------------------------------------------------
     global mandate_text_parts
     mandate_text_parts.clear()  # reset each selection
 
@@ -362,7 +381,9 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
     # combine outside (via helper), then use inside
     mandate_text = compute_mandate_text()
 
- 
+    # -------------------------------------------------------
+    # SHOW MANDATE TEXT IN THE UI
+    # -------------------------------------------------------
     st.markdown("### 🧭 Investor Mandate Summary")
     if mandate_text:
         st.text_area(
@@ -373,7 +394,9 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
     else:
         st.info("No mandate information found for this investor.")
 
-  
+    # -------------------------------------------------------
+    # Website handling (show extracted text)
+    # -------------------------------------------------------
     website = (
         str(current_company.get("WEBSITE") or current_company.get("Website") or "")
         .strip()
@@ -499,10 +522,12 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
 
     greeting_line = f"Dear {greeting_recipient},"
 
-   
+    # -------------------------------------------------------
     # PRODUCT / EXECUTIVE SUMMARY UPLOAD (NEW FEATURE)
-   
+    # -------------------------------------------------------
     st.markdown("### 📄 Upload Investment Product Material")
+
+    int uploaded = 0
 
     uploaded_product_file = st.file_uploader(
         "Upload Executive Summary / Deck / Product Document (PDF, DOCX, or TXT)",
@@ -512,16 +537,20 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
 
     if uploaded_product_file is not None:
         st.success(f"Uploaded: {uploaded_product_file.name}")
+       
     else:
         st.info("You can optionally upload a product document. The email will still work without it.")
 
-   
+    # -------------------------------------------------------
     # Subject line logic (depends on whether product/AVO file is uploaded)
-   
+    # -------------------------------------------------------
     if uploaded_product_file is not None:
+        uploaded = 1
         email_subject = "Opportunistic Farmland Fund – Executive Summary & Investment Highlights"
     else:
         email_subject = f"Exploring Collaboration with {company_name}"
+    
+    has_product_file = uploaded_product_file is not None
 
     # ---- 4. Generate email with correct greeting + firm philosophy + website + PRODUCT FILE ----
     if st.button("Generate Email"):
@@ -604,6 +633,9 @@ Investor mandate details (MUST be reviewed and used for personalization):
 Public website context (MUST be reviewed; use only what is clearly implied):
 {website_context}
 
+PRODUCT DOCUMENT ATTACHED: {has_product_file}
+
+
 ────────────────────────────────────────────────────────
 STRUCTURE & CONTENT RULES (CRITICAL)
 ────────────────────────────────────────────────────────
@@ -616,6 +648,18 @@ STRUCTURE & CONTENT RULES (CRITICAL)
 • Other sections MAY be lightly tailored based on the investor’s mandate,
   strategy preferences, or profile — but must remain conservative and factual.
 • Do NOT exaggerate, speculate, or invent performance claims.
+
+If PRODUCT DOCUMENT ATTACHED = true:
+→ Follow ONLY the section titled:
+  "EMAIL FLOW (WHEN PRODUCT DOCUMENT IS ATTACHED)"
+
+If PRODUCT DOCUMENT ATTACHED = false:
+→ Follow ONLY the section titled:
+  "WHEN NO PRODUCT DOCUMENT IS ATTACHED"
+
+
+Do NOT combine or mix instructions from both sections.
+Follow exactly ONE path.
 
 ────────────────────────────────────────────────────────
 EMAIL FLOW (WHEN PRODUCT DOCUMENT IS ATTACHED)
@@ -798,4 +842,3 @@ IMPORTANT OUTPUT REQUIREMENTS
                     ),
                     cc_list=st.session_state.cc_list if st.session_state.cc_list else None,
                 )
-
