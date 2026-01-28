@@ -527,6 +527,7 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
     # -------------------------------------------------------
     st.markdown("### 📄 Upload Investment Product Material")
 
+
     uploaded_product_file = st.file_uploader(
         "Upload Executive Summary / Deck / Product Document (PDF, DOCX, or TXT)",
         type=["pdf", "docx", "txt"],
@@ -600,39 +601,40 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
             # Main user prompt text (no fake product text, we rely on file attachment)
             prompt_text = f"""
 You are writing on behalf of Asymmetrica Investments AG. Your task is to generate a
-human, concise, naturally-written outreach email to a potential investment partner.
-The tone must feel professional, thoughtful, and written by a real person — NEVER AI-sounding.
+human, concise, naturally-written first-contact outreach email to a potential investment partner.
+The tone must feel professional, direct, and written by a real person — NEVER AI-sounding.
 
 Always follow these global rules:
 • Never mention any individual sender’s name unless the template explicitly requires it.
 • Never add extra sections beyond what is described.
+• Default to a formal greeting using LAST NAME only (Mr./Ms. + Last Name). Do NOT use first name.
 • Never change the greeting line. It must begin exactly as:
   {greeting_line}
-• When referencing the firm, rely only on the provided information — do not invent facts.
-• When a product document is attached, you MUST follow the structure rules below EXACTLY.
-• When NO product document is attached, follow the non-attachment instructions at the end.
+• When referencing the investor/firm, rely only on the provided information — do not invent facts.
+• Keep the introduction SHORT (2–3 sentences max) and make the value clear immediately.
+• Focus only on the main points; avoid extra detail.
+• End with a direct, simple close (1 sentence) and a clear next step.
 
 ────────────────────────────────────────────────────────
 ASSET INFORMATION AVAILABLE TO YOU
 ────────────────────────────────────────────────────────
 
-Asymmetrica overview (use to describe who we are, briefly and naturally):
+Asymmetrica overview (use briefly — 1–2 sentences max):
 {ASYMMETRICA_SUMMARY}
 
-Target firm profile (use for personalization):
+Target firm profile (use for light personalization, 1–2 lines max):
 • Company Name: {company_name}
 • Location: {location_text or 'N/A'}
 • Strategy Preferences: {strategy_prefs or 'N/A'}
 • Background / Investment Interests: {investment_interests or 'N/A'}
 
-Investor mandate details (MUST be reviewed and used for personalization):
+Investor mandate details (use only what is relevant; do NOT dump everything):
 {mandate_text}
 
-Public website context (MUST be reviewed; use only what is clearly implied):
+Public website context (use only what is clearly implied):
 {website_context}
 
 PRODUCT DOCUMENT ATTACHED: {has_product_file}
-
 
 ────────────────────────────────────────────────────────
 STRUCTURE & CONTENT RULES (CRITICAL)
@@ -640,11 +642,11 @@ STRUCTURE & CONTENT RULES (CRITICAL)
 
 • The email MUST use bullet points for all investment highlights.
 • Bullet points must be plain text bullets (• or -), NOT markdown formatting.
-• The section titled **“Fund Structure & Commitments” MUST remain STATIC**:
+• Keep highlights tight: 3–5 bullets per section unless truly necessary.
+• The section titled “Fund Structure & Commitments” MUST remain STATIC:
   - Do NOT change numbers, ranges, structure, or wording in that section.
   - Reproduce it exactly as provided below.
-• Other sections MAY be lightly tailored based on the investor’s mandate,
-  strategy preferences, or profile — but must remain conservative and factual.
+• Other highlight sections MAY be lightly tailored to the investor profile, but stay conservative and factual.
 • Do NOT exaggerate, speculate, or invent performance claims.
 
 If PRODUCT DOCUMENT ATTACHED = true:
@@ -653,8 +655,7 @@ If PRODUCT DOCUMENT ATTACHED = true:
 
 If PRODUCT DOCUMENT ATTACHED = false:
 → Follow ONLY the section titled:
-  "WHEN NO PRODUCT DOCUMENT IS ATTACHED"
-
+  "WHEN NO PRODUCT DOCUMENT IS ATTACHED)"
 
 Do NOT combine or mix instructions from both sections.
 Follow exactly ONE path.
@@ -663,15 +664,14 @@ Follow exactly ONE path.
 EMAIL FLOW (WHEN PRODUCT DOCUMENT IS ATTACHED)
 ────────────────────────────────────────────────────────
 
-The email MUST begin with:
-1. A warm, human introduction about Asymmetrica Investments AG.
-2. One or two personalized lines explaining WHY you are reaching out to this investor
-   (based on mandate, strategy preferences, location, or website context).
-3. A soft, natural transition into the attached executive summary.
+Required flow:
+1) Greeting line exactly: {greeting_line}
+2) Short intro (2 sentences max):
+   - 1 sentence: who we are (Asymmetrica) and what we do (real-asset / impact / asymmetric profile) and why this investor specifically (use 1 relevant mandate/website detail).
+   - 1 sentence: direct bridge to the attachment, combined with the this something like this sentence (verbatim):
+"Attached is the executive summary for the AVO Capital Fund, a structured opportunity designed for long-term capital partners seeking exposure to high-margin agriculture and inflation-resilient assets. Key highlights include:"
 
-Next say "Attached is the executive summary for the AVO Capital Fund, a structured opportunity designed for long-term capital partners seeking exposure to high-margin agriculture and inflation-resilient assets. Key highlights include:"
-
-Now base the following information depending on the investor's profile
+Then include highlights using bullets (plain text only). Keep it focused.
 Performance & Profitability
 • Target Net Return (IRR): 20–25% annually in USD.
 • Underlying Asset: Export-focused superfood farms with EBITDA margins > 50%.
@@ -683,8 +683,7 @@ Portfolio Diversification & Inflation Hedge
 • Cash flows remain uncorrelated with real estate, VC, and traditional private equity.
 • Asset class remains undercapitalized despite rising global demand.
 
-BUT NOW THIS: 
-Fund Structure & Commitments  (THIS SECTION IS STATIC — DO NOT MODIFY)
+Fund Structure & Commitments (THIS SECTION IS STATIC — DO NOT MODIFY)
 • Fund Size: USD 50–70M target, scalable to USD 150M capacity.
 • First Closing: USD 20M.
 • Investment Allocation:
@@ -695,19 +694,20 @@ Fund Structure & Commitments  (THIS SECTION IS STATIC — DO NOT MODIFY)
 • Distribution Profile: 8–14% target yield, semi-annual.
 • First compartment of an umbrella structure fund.
 
-Closing lines (adapt tone slightly, but keep meaning):
-If there is interest, we can provide access to our data room, including the Investment Memorandum, PPM, and full due diligence materials.
-Happy to schedule a discussion once you’ve reviewed the attached material.
-Looking forward to your feedback.
+Direct closing (1–2 sentences max, no fluff):
+- Offer data room access if relevant
+- Ask for a quick call / next step
+- Do NOT add a signature block
 
 ────────────────────────────────────────────────────────
 WHEN NO PRODUCT DOCUMENT IS ATTACHED
 ────────────────────────────────────────────────────────
 
 If NO document is attached:
-• Write a brief, warm, professional outreach email.
+• Write a brief, professional first-contact outreach email (short).
 • Begin with the exact greeting line: {greeting_line}
-• Use Asymmetrica’s summary, the investor mandate, and website context to explain strategic fit.
+• Intro must be 2–3 sentences max: who we are + why them + direct ask.
+• Use Asymmetrica’s summary + 1 relevant investor mandate/website detail to explain fit.
 • Do NOT include deal terms, performance figures, or product specifics.
 • Do NOT include a signature.
 • End with this exact final sentence and nothing after it:
@@ -718,8 +718,9 @@ IMPORTANT OUTPUT REQUIREMENTS
 ────────────────────────────────────────────────────────
 • Output ONLY the email body.
 • No headers, no explanations, no meta-comments.
-• Maintain a human, confident, professional tone.
+• Maintain a human, concise, confident professional tone.
 """.strip()
+
 
 
             # Build the content for Responses API
