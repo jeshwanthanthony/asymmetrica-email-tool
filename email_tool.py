@@ -600,127 +600,84 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
 
             # Main user prompt text (no fake product text, we rely on file attachment)
             prompt_text = f"""
-You are writing on behalf of Asymmetrica Investments AG. Your task is to generate a
-human, concise, naturally-written first-contact outreach email to a potential investment partner.
-The tone must feel professional, direct, and written by a real person — NEVER AI-sounding.
+You are writing a first-contact outreach email on behalf of Asymmetrica Investments AG.
 
-Always follow these global rules:
-• Never mention any individual sender’s name unless the template explicitly requires it.
-• Never add extra sections beyond what is described.
-• Default to a formal greeting using LAST NAME only (Mr./Ms. + Last Name). Do NOT use first name.
-• Never change the greeting line. It must begin exactly as:
-  {greeting_line}
-• When referencing the investor/firm, rely only on the provided information — do not invent facts.
-• Keep the introduction SHORT (2–3 sentences max) and make the value clear immediately.
-• Focus only on the main points; avoid extra detail.
-• End with a direct, simple close (1 sentence) and a clear next step.
+Tone:
+- Professional, direct, and natural.
+- Clear and simple language.
+- Investors skim — keep it concise and easy to read.
+- Do NOT use words like “asymmetric”, “arbitrage”, or overly technical jargon.
+- No markdown formatting.
 
-────────────────────────────────────────────────────────
-ASSET INFORMATION AVAILABLE TO YOU
-────────────────────────────────────────────────────────
+Greeting:
+Start with:
+{greeting_line}
 
-Asymmetrica overview (use briefly — 1–2 sentences max):
-{ASYMMETRICA_SUMMARY}
+Use a formal tone (Mr./Ms. + last name only).
 
-Target firm profile (use for light personalization, 1–2 lines max):
-• Company Name: {company_name}
-• Location: {location_text or 'N/A'}
-• Strategy Preferences: {strategy_prefs or 'N/A'}
-• Background / Investment Interests: {investment_interests or 'N/A'}
-
-Investor mandate details (use only what is relevant; do NOT dump everything):
+Context about the investor:
+Company: {company_name}
+Location: {location_text or 'N/A'}
+Strategy Preferences: {strategy_prefs or 'N/A'}
+Investment Background: {investment_interests or 'N/A'}
+Mandate Notes:
 {mandate_text}
-
-Public website context (use only what is clearly implied):
+Website Context:
 {website_context}
 
 PRODUCT DOCUMENT ATTACHED: {has_product_file}
 
-────────────────────────────────────────────────────────
-STRUCTURE & CONTENT RULES (CRITICAL)
-────────────────────────────────────────────────────────
+----------------------------------------
+IF PRODUCT DOCUMENT ATTACHED = true
+----------------------------------------
 
-• The email MUST use bullet points for all investment highlights.
-• Bullet points must be plain text bullets (• or -), NOT markdown formatting.
-• Keep highlights tight: 3–5 bullets per section unless truly necessary.
-• The section titled “Fund Structure & Commitments” MUST remain STATIC:
-  - Do NOT change numbers, ranges, structure, or wording in that section.
-  - Reproduce it exactly as provided below.
-• Other highlight sections MAY be lightly tailored to the investor profile, but stay conservative and factual.
-• Do NOT exaggerate, speculate, or invent performance claims.
+Structure:
 
-If PRODUCT DOCUMENT ATTACHED = true:
-→ Follow ONLY the section titled:
-  "EMAIL FLOW (WHEN PRODUCT DOCUMENT IS ATTACHED)"
+1) Greeting
+2) One personalized sentence explaining why you are reaching out that SHOULD MATCH thier background
+    based on the context of the investor.
+   (example style: “I am reaching out as your portfolio has historically included real asset and inflation-resilient strategies, which align closely with our current opportunity.”)
+3) One sentence describing Asymmetrica in simple terms, you have the information for that. 
+   (Swiss-based impact investment manager focused on structured real-asset investments).
+4) One short sentence introducing the AVO Capital Fund, combined in a paragraph along with 3) sentence
+5) A section titled: Key Highlights (Make sure to look at the pdf uploaded, because they are subject to change)
+6) Bullet points (•) — keep simple and clear.
 
-If PRODUCT DOCUMENT ATTACHED = false:
-→ Follow ONLY the section titled:
-  "WHEN NO PRODUCT DOCUMENT IS ATTACHED)"
+Include these fund terms clearly (keep numbers accurate):
 
-Do NOT combine or mix instructions from both sections.
-Follow exactly ONE path.
+• Target Net IRR: 20–25% (USD)
+• Target Yield: 8–14%, semi-annual distributions
+• Strategy: Export-oriented avocado farmland with EBITDA margins >50%
+• Fund Size: USD 50–70M (First Close: USD 20M)
+• Minimum Commitment: USD 1M
 
-────────────────────────────────────────────────────────
-EMAIL FLOW (WHEN PRODUCT DOCUMENT IS ATTACHED)
-────────────────────────────────────────────────────────
+Then add 1 short sentence explaining how the strategy makes money in plain language and match thier backgorund 
+or make it interesting for them.
+(e.g., operational improvements, land-backed downside protection, premium export positioning).
 
-Required flow:
-1) Greeting line exactly: {greeting_line}
-2) Short intro (2 sentences max):
-   - 1 sentence: who we are (Asymmetrica) and what we do (real-asset / impact / asymmetric profile) and why this investor specifically (use 1 relevant mandate/website detail).
-   - 1 sentence: direct bridge to the attachment, combined with the this something like this sentence (verbatim):
-"Attached is the executive summary for the AVO Capital Fund, a structured opportunity designed for long-term capital partners seeking exposure to high-margin agriculture and inflation-resilient assets. Key highlights include:"
+Close naturally and directly:
+Offer to share the deck/data room or schedule a short call or a vairation.
+End with:
+Best regards,
 
-Then include highlights using bullets (plain text only). Keep it focused.
-Performance & Profitability
-• Target Net Return (IRR): 20–25% annually in USD.
-• Underlying Asset: Export-focused superfood farms with EBITDA margins > 50%.
-• Strategic Positioning: Deployment across top-producing regions creates arbitrage opportunities supported by generational turnover.
-• Distribution Advantage: Collaboration with Avoworks, the 4th largest U.S. avocado importer, securing premium market access.
+----------------------------------------
+IF PRODUCT DOCUMENT ATTACHED = false
+----------------------------------------
 
-Portfolio Diversification & Inflation Hedge
-• Farmland provides structural protection against inflation and developed-market volatility.
-• Cash flows remain uncorrelated with real estate, VC, and traditional private equity.
-• Asset class remains undercapitalized despite rising global demand.
+Write a shorter email:
+- Greeting
+- One personalized outreach sentence
+- One sentence about Asymmetrica
+- One sentence about strategic fit
+- Close with:
 
-Fund Structure & Commitments (THIS SECTION IS STATIC — DO NOT MODIFY)
-• Fund Size: USD 50–70M target, scalable to USD 150M capacity.
-• First Closing: USD 20M.
-• Investment Allocation:
-  - 70% orchard acquisitions (brownfield/greenfield)
-  - 30% CAPEX efficiency upgrades and processing improvements
-• Minimum Ticket Size: USD 1M.
-• Typical investment size: USD $4M per asset (combined initial + follow-up).
-• Distribution Profile: 8–14% target yield, semi-annual.
-• First compartment of an umbrella structure fund.
+"Would you be available for a brief call to discuss further?"
 
-Direct closing (1–2 sentences max, no fluff):
-- Offer data room access if relevant
-- Ask for a quick call / next step
-- Do NOT add a signature block
+----------------------------------------
 
-────────────────────────────────────────────────────────
-WHEN NO PRODUCT DOCUMENT IS ATTACHED
-────────────────────────────────────────────────────────
-
-If NO document is attached:
-• Write a brief, professional first-contact outreach email (short).
-• Begin with the exact greeting line: {greeting_line}
-• Intro must be 2–3 sentences max: who we are + why them + direct ask.
-• Use Asymmetrica’s summary + 1 relevant investor mandate/website detail to explain fit.
-• Do NOT include deal terms, performance figures, or product specifics.
-• Do NOT include a signature.
-• End with this exact final sentence and nothing after it:
-  "Would you be available for a brief call to discuss further?"
-
-────────────────────────────────────────────────────────
-IMPORTANT OUTPUT REQUIREMENTS
-────────────────────────────────────────────────────────
-• Output ONLY the email body.
-• No headers, no explanations, no meta-comments.
-• Maintain a human, concise, confident professional tone.
+Output ONLY the email body.
+No explanations.
 """.strip()
-
 
 
             # Build the content for Responses API
