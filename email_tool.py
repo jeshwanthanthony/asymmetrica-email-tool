@@ -104,7 +104,6 @@ def normalize_crm_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     out["Investment Interests"] = df[interests_col] if interests_col else ""
 
-    # Extra context for personalization if present
     for nice in ["CITY", "STATE/COUNTY", "COUNTRY", "REGION", "AUM (USD MN)", "WEBSITE"]:
         key = nice.strip().lower()
         if key in cols and cols[key] not in out.columns:
@@ -143,9 +142,8 @@ def fetch_website_context(website: str, max_chars: int = 5000) -> str:
     if not base.startswith(("http://", "https://")):
         base = "https://" + base
 
-    # Pages to test (relative)
     candidate_paths = [
-        "",  # homepage first
+        "",
         "about",
         "about-us",
         "aboutus",
@@ -163,14 +161,10 @@ def fetch_website_context(website: str, max_chars: int = 5000) -> str:
     tested = 0
 
     for path in candidate_paths:
-        if tested >= 3:    # only collect up to 3 valid pages
+        if tested >= 3:
             break
 
-        # Build URL
-        if path:
-            url = base.rstrip("/") + "/" + path
-        else:
-            url = base
+        url = base.rstrip("/") + "/" + path if path else base
 
         try:
             resp = requests.get(url, timeout=5)
@@ -181,10 +175,8 @@ def fetch_website_context(website: str, max_chars: int = 5000) -> str:
 
         tested += 1
 
-        # Parse and clean text
         try:
             soup = BeautifulSoup(resp.text, "html.parser")
-            # Remove useless tags
             for tag in soup(["script", "style", "noscript"]):
                 tag.decompose()
             text = " ".join(soup.get_text(separator=" ").split())
@@ -193,7 +185,6 @@ def fetch_website_context(website: str, max_chars: int = 5000) -> str:
         except Exception:
             continue
 
-    # If nothing collected → fallback to original homepage scrape
     if not collected_texts:
         try:
             resp = requests.get(base, timeout=5)
@@ -206,7 +197,6 @@ def fetch_website_context(website: str, max_chars: int = 5000) -> str:
         except Exception:
             return ""
 
-    # Merge all valid texts and trim
     combined = "\n\n".join(collected_texts)
     return combined[:max_chars]
 
@@ -232,28 +222,15 @@ def get_openai_response(messages):
 
 
 # =====================================================
-# Helpers for email body formatting / SendGrid template
+# Helpers for email body formatting
 # =====================================================
 def prepare_email_body_for_template(body_text: str) -> str:
-    """Clean and convert plain text into HTML-friendly lines for the template."""
-    # Strip any bold markers just in case
     clean = body_text.replace("**", "")
-
-    # Normalize newlines
     clean = clean.replace("\r\n", "\n")
-
-    # Turn line breaks into <br> so HTML respects them
     html_body = clean.replace("\n\n", "<br><br>").replace("\n", "<br>")
-
     return html_body
 
 
-# =====================================================
-# Send Email via SendGrid (with dynamic template + optional CC)
-# =====================================================
-# =====================================================
-# Send Email via SendGrid (plain text, optional CC)
-# =====================================================
 # =====================================================
 # Send Email via SendGrid (plain text, optional CC)
 # =====================================================
@@ -263,6 +240,13 @@ def send_email(from_email, to_email, subject, body_text, cc_list=None):
     if not from_email:
         st.error("Please enter a sender email before sending.")
         return
+
+    if not to_email or "@" not in str(to_email):
+        st.error(f"Invalid recipient email: {to_email}")
+        return
+
+    if not subject:
+        subject = "Investment Opportunity - Asymmetrica"
 
     if not SENDGRID_AVAILABLE or not sendgrid_key:
         st.warning("SendGrid not configured — running in test mode.")
@@ -275,40 +259,34 @@ def send_email(from_email, to_email, subject, body_text, cc_list=None):
         return
 
     try:
-        sg = SendGridAPIClient(sendgrid_key)
-
         message = Mail(
             from_email=from_email,
             to_emails=to_email,
+            subject=subject,
+            plain_text_content=body_text,
         )
 
-        # ✅ REQUIRED: Template ID
-        message.template_id = "d-6d042f7969624cdd87217c826865819a"
-
-        # ✅ REQUIRED: Dynamic data
-        message.dynamic_template_data = {
-            "subject": subject,
-            "email_body": body_text,   # ← plain text, untouched
-        }
-
-        # Optional CC
         if cc_list:
             message.cc = cc_list
 
+        sg = SendGridAPIClient(sendgrid_key)
         response = sg.send(message)
 
         if response.status_code in (200, 202):
             st.success(f"Email sent to {to_email}")
         else:
             st.error(f"SendGrid failed: {response.status_code}")
+            try:
+                st.code(response.body.decode() if hasattr(response.body, "decode") else str(response.body))
+            except Exception:
+                pass
 
     except Exception as e:
         st.error(f"SendGrid error: {e}")
 
 
-
 # =====================================================
-# Mandate helpers (outside the function as requested)
+# Mandate helpers
 # =====================================================
 def safe_get(df_row, col_name):
     """Get column text safely, clean, fallback to empty."""
@@ -318,12 +296,10 @@ def safe_get(df_row, col_name):
     return ""
 
 
-# global list (outside)
 mandate_text_parts = []
 
 
 def compute_mandate_text() -> str:
-    """Join the global mandate parts into final text (outside)."""
     return "\n\n".join(mandate_text_parts)
 
 
@@ -346,10 +322,10 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
     firm_email = str(current_company.get("Email", "")).strip()
 
     # -------------------------------------------------------
-    # BUILD MANDATE TEXT (append to global list; combine outside)
+    # BUILD MANDATE TEXT
     # -------------------------------------------------------
     global mandate_text_parts
-    mandate_text_parts.clear()  # reset each selection
+    mandate_text_parts.clear()
 
     background = safe_get(current_company, "BACKGROUND")
     strategy_pref = safe_get(current_company, "PE: STRATEGY PREFERENCES")
@@ -378,7 +354,6 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
     if aum_val:
         mandate_text_parts.append(f"AUM (USD MN):\n{aum_val}")
 
-    # combine outside (via helper), then use inside
     mandate_text = compute_mandate_text()
 
     # -------------------------------------------------------
@@ -395,7 +370,7 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
         st.info("No mandate information found for this investor.")
 
     # -------------------------------------------------------
-    # Website handling (show extracted text)
+    # Website handling
     # -------------------------------------------------------
     website = (
         str(current_company.get("WEBSITE") or current_company.get("Website") or "")
@@ -418,12 +393,10 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
     else:
         st.info("No website provided in this row.")
 
-    # build a location string for the prompt
     location_text = ", ".join(
         [str(x) for x in [city_val, country_val, region_val] if str(x).strip()]
     )
 
-    # pull these for the prompt (support both normalized and raw Preqin names)
     investment_interests = (
         str(current_company.get("Investment Interests", "")).strip()
         or background
@@ -484,9 +457,7 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
                             "is_investment_role": (
                                 ("investment" in role.lower())
                                 or ("portfolio" in role.lower())
-                            )
-                            if role
-                            else False,
+                            ) if role else False,
                         }
                     )
             else:
@@ -523,10 +494,9 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
     greeting_line = f"Dear {greeting_recipient},"
 
     # -------------------------------------------------------
-    # PRODUCT / EXECUTIVE SUMMARY UPLOAD (NEW FEATURE)
+    # PRODUCT / EXECUTIVE SUMMARY UPLOAD
     # -------------------------------------------------------
     st.markdown("### 📄 Upload Investment Product Material")
-
 
     uploaded_product_file = st.file_uploader(
         "Upload Executive Summary / Deck / Product Document (PDF, DOCX, or TXT)",
@@ -536,25 +506,22 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
 
     if uploaded_product_file is not None:
         st.success(f"Uploaded: {uploaded_product_file.name}")
-       
     else:
         st.info("You can optionally upload a product document. The email will still work without it.")
 
     # -------------------------------------------------------
-    # Subject line logic (depends on whether product/AVO file is uploaded)
+    # Subject line logic
     # -------------------------------------------------------
     if uploaded_product_file is not None:
-        uploaded = 1
         email_subject = "Opportunistic Farmland Fund – Executive Summary & Investment Highlights"
     else:
         email_subject = f"Exploring Collaboration with {company_name}"
-    
+
     has_product_file = uploaded_product_file is not None
 
-    # ---- 4. Generate email with correct greeting + firm philosophy + website + PRODUCT FILE ----
+    # ---- 4. Generate email with GPT + optional product file ----
     if st.button("Generate Email"):
         with st.spinner("Generating email draft..."):
-            # Build website context string (re-use website_text already fetched above)
             website_context = (
                 f"Here is public text extracted from the firm's website ({website}):\n"
                 f"{website_text}\n\n"
@@ -570,12 +537,6 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
                 return
 
             client = OpenAI(api_key=openai_key)
-
-            # ------------------ upload product file to OpenAI (if provided) ------------------
-            file_content_part = [
-                {"type": "input_text", "text": ""}  # will be replaced below
-            ]
-            # we will rebuild it properly right after constructing prompt_text
 
             file_attachment_part = []
             if uploaded_product_file is not None:
@@ -598,7 +559,6 @@ def email_tool(crm_df: pd.DataFrame, contacts_df: pd.DataFrame = None):
                     st.error(f"Failed to upload product file to OpenAI: {e}")
                     file_attachment_part = []
 
-            # Main user prompt text (no fake product text, we rely on file attachment)
             prompt_text = f"""
 You are writing a first-contact outreach email on behalf of Asymmetrica Investments AG.
 
@@ -613,7 +573,7 @@ Greeting:
 Start with:
 {greeting_line}
 
-Use a formal tone (Mr./Ms. + last name only).
+Use a formal tone.
 
 Context about the investor:
 Company: {company_name}
@@ -627,60 +587,20 @@ Website Context:
 
 PRODUCT DOCUMENT ATTACHED: {has_product_file}
 
-----------------------------------------
-IF PRODUCT DOCUMENT ATTACHED = true
-----------------------------------------
+IF PRODUCT DOCUMENT ATTACHED = true:
+- Read the attached file.
+- Use it naturally in the email.
+- Include a "Key Highlights" section with bullet points.
+- Keep any listed numbers accurate.
+- Add one short sentence explaining how the strategy makes money in plain language.
 
-Structure:
-
-1) Greeting
-2) One personalized sentence explaining why you are reaching out that SHOULD MATCH thier background
-    based on the context of the investor.
-   (example style: “I am reaching out as your portfolio has historically included real asset and inflation-resilient strategies, which align closely with our current opportunity.”)
-3) One sentence describing Asymmetrica in simple terms, you have the information for that. 
-   (Swiss-based impact investment manager focused on structured real-asset investments).
-4) One short sentence introducing the AVO Capital Fund, combined in a paragraph along with 3) sentence
-5) A section titled: Key Highlights (Make sure to look at the pdf uploaded, because they are subject to change)
-6) Bullet points (•) — keep simple and clear.
-
-Include these fund terms clearly (keep numbers accurate):
-
-• Target Net IRR: 20–25% (USD)
-• Target Yield: 8–14%, semi-annual distributions
-• Strategy: Export-oriented avocado farmland with EBITDA margins >50%
-• Fund Size: USD 50–70M (First Close: USD 20M)
-• Minimum Commitment: USD 1M
-
-Then add 1 short sentence explaining how the strategy makes money in plain language and match thier backgorund 
-or make it interesting for them.
-(e.g., operational improvements, land-backed downside protection, premium export positioning).
-
-Close naturally and directly:
-Offer to share the deck/data room or schedule a short call or a vairation.
-End with:
-Best regards,
-
-----------------------------------------
-IF PRODUCT DOCUMENT ATTACHED = false
-----------------------------------------
-
-Write a shorter email:
-- Greeting
-- One personalized outreach sentence
-- One sentence about Asymmetrica
-- One sentence about strategic fit
-- Close with:
-
-"Would you be available for a brief call to discuss further?"
-
-----------------------------------------
+IF PRODUCT DOCUMENT ATTACHED = false:
+- Write a shorter email without deal-specific bullet points.
 
 Output ONLY the email body.
 No explanations.
 """.strip()
 
-
-            # Build the content for Responses API
             content_parts = [
                 {"type": "input_text", "text": prompt_text}
             ] + file_attachment_part
@@ -696,18 +616,15 @@ No explanations.
                     ],
                 )
 
-                # Responses API: extract the generated text safely
                 email_text = ""
                 try:
                     email_text = response.output[0].content[0].text
                 except Exception:
-                    # fallback: stringifying whole response if shape changes
                     email_text = str(response)
             except Exception as e:
                 st.error(f"OpenAI request failed: {e}")
                 return
 
-            # Remove any markdown bold markers like **this**
             email_text = email_text.replace("**", "")
 
             st.session_state.generated_email = email_text
@@ -732,7 +649,6 @@ No explanations.
                 st.session_state["generated_email"] = st.session_state["draft_email_text"]
                 st.success("Draft saved.")
 
-        # sender email
         st.session_state.setdefault("from_email", "")
         col1, col2 = st.columns([3, 1])
         with col1:
@@ -749,9 +665,8 @@ No explanations.
                 if cleaned:
                     st.info(f"Sender email set to: {cleaned}")
                 else:
-                    st.error("Please enter a valid sender email before sending. Verify via Sendgrind")
+                    st.error("Please enter a valid sender email before sending.")
 
-        # CC EMAILS (optional)
         st.markdown("### CC (Optional)")
 
         if "cc_list" not in st.session_state:
@@ -787,6 +702,10 @@ No explanations.
             elif not sender_email:
                 st.error("Please set a valid sender email before sending.")
             else:
+                st.write("DEBUG TO:", final_recipient)
+                st.write("DEBUG FROM:", sender_email)
+                st.write("DEBUG SUBJECT:", email_subject)
+
                 st.info(f"Sending email from {sender_email} to {final_recipient} ...")
                 send_email(
                     sender_email,
